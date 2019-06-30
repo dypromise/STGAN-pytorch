@@ -1,0 +1,49 @@
+# meta
+exp_name: stgan
+model_name: stgan_xmmt
+mode: train
+cuda: true
+ngpu: 4
+
+# data
+dataset: celeba
+data_root: ./data
+att_list_file: ./att_list
+crop_size: 384
+image_size: 384
+
+# model
+enc_dim: 48
+stu_dim: 48
+dec_dim: 48
+enc_layers: 5
+stu_layers: 5
+dec_layers: 5
+shortcut_layers: 4
+inject_layers: 4
+stu_kernel_size: 3
+stu_inject_layers: 4
+use_stu: true
+multi_inputs: 1
+one_more_conv: 0
+attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Young]
+checkpoint: ~
+
+# training
+batch_size: 16
+beta1: 0.5
+beta2: 0.9
+g_lr: 0.0002
+d_lr: 0.0002
+n_critic: 5
+thres_int: 0.5
+d_loss_att_weight: 10
+g_loss_att_weight: 10
+rec_loss_weight: 100
+max_iters: 1000000
+lr_decay_iters: 800000
+
+# steps:
+summary_step: 10
+sample_step: 2500
+checkpoint_step: 2500
