@@ -22,19 +22,18 @@ Please download the [CelebA](http://openaccess.thecvf.com/content_iccv_2015/pape
 
 ```
 ├── data_root
-│   └── image
-│       ├── 000001.jpg
-│       ├── 000002.jpg
-│       ├── 000003.jpg
-│       └── ...
-│   └── anno
-│       ├── list_attr_celeba.txt
-│       └── ...
+│    ├── 000001.jpg
+│    ├── 000002.jpg
+│    ├── 000003.jpg
+│    └── ...
+├── list_attr_celeba.txt
+
 ```
 
 ## Training
 
-- For quickly start, you can simply use the following command to train:
+- For quickly start, you can simply use the following command to train. In fact, please mkdir 'experients' on the . 
+repo's root, and mkdir a special 'exp_xxx' dir in it with two files: 'train.sh' and 'train_xxx_config.yaml'
 
   ```console
   CUDA_VISIBLE_DEVICES=0,1,2,3 python main.py --config ./configs/train_stgan.yaml

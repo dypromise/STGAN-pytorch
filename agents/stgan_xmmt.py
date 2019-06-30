@@ -14,7 +14,7 @@ from tensorboardX import SummaryWriter
 import argparse
 
 from datasets import *
-from models.stgan_xmmt import G_stgan, D_stgan, gradient_penalty
+from models.stgan_xmmt import G_stgan, D_stgan
 from utils.misc import print_cuda_statistics
 
 cudnn.benchmark = True
@@ -23,6 +23,8 @@ cudnn.benchmark = True
 class STGANAgent(object):
     def __init__(self, config):
         self.config = config
+        for k, v in self.config.items():
+            print("{}: {}".format(k, v))
         self.logger = logging.getLogger("STGAN")
         self.logger.info("Creating STGAN architecture...")
 
@@ -50,7 +52,7 @@ class STGANAgent(object):
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
             self.config.data_root, self.config.att_list_file, self.config.mode,
             self.config.attrs, self.config.crop_size, self.config.image_size,
-            self.config.batch_size)
+            self.config.batch_size, self.config.num_workers)
 
         self.current_iteration = 0
         self.cuda = torch.cuda.is_available() & self.config.cuda
@@ -138,6 +140,20 @@ class STGANAgent(object):
         return F.binary_cross_entropy_with_logits(
             logit, target, reduction='sum') / logit.size(0)
 
+    def gradient_penalty(self, y, x):
+        """Compute gradient penalty: (L2_norm(dy/dx) - 1)**2."""
+        weight = torch.ones(y.size()).to(self.device)
+        dydx = torch.autograd.grad(outputs=y,
+                                   inputs=x,
+                                   grad_outputs=weight,
+                                   retain_graph=True,
+                                   create_graph=True,
+                                   only_inputs=True)[0]
+
+        dydx = dydx.view(dydx.size(0), -1)
+        dydx_l2norm = torch.sqrt(torch.sum(dydx**2, dim=1))
+        return torch.mean((dydx_l2norm - 1)**2)
+
     def run(self):
         assert self.config.mode in ['train', 'test']
         try:
@@ -148,6 +164,7 @@ class STGANAgent(object):
         except KeyboardInterrupt:
             self.logger.info('You have entered CTRL+C.. Wait to finalize')
         except Exception as e:
+            traceback.print_exc()
             log_file = open(os.path.join(
                 self.config.log_dir, 'exp_error.log'), 'w+')
             traceback.print_exc(file=log_file)
@@ -229,10 +246,15 @@ class STGANAgent(object):
             d_loss_fake = torch.mean(xb__logit_gan)
 
             # compute loss for gradient penalty
-            d_loss_gp = gradient_penalty(self.D, x_real, x_fake.detach())
+            alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
+            x_hat = (alpha * x_real.data + (
+                1 - alpha) * x_fake.data).requires_grad_(True)
+            out_src, _ = self.D(x_hat)
+            d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
             # backward and optimize
-            d_loss_gan = d_loss_real + d_loss_fake + 10 * d_loss_gp
+            d_loss_gan = d_loss_real + d_loss_fake + \
+                self.config.d_loss_gp_weight * d_loss_gp
             d_loss = d_loss_gan + self.config.d_loss_att_weight * d_loss_att
             self.optimizer_D.zero_grad()
             d_loss.backward(retain_graph=True)
@@ -241,11 +263,11 @@ class STGANAgent(object):
             # summarize
             scalars = {}
             scalars['D/loss'] = d_loss.item()
-            scalars['D/d_loss_gan'] = d_loss_gan.item()
-            scalars['D/d_loss_att'] = d_loss_att.item()
-            scalars['D/d_loss_real'] = d_loss_real.item()
-            scalars['D/d_loss_fake'] = d_loss_fake.item()
-            scalars['D/d_loss_gp'] = d_loss_gp.item()
+            scalars['D/loss_adv'] = d_loss_gan.item()
+            scalars['D/loss_cls'] = d_loss_att.item()
+            scalars['D/loss_real'] = d_loss_real.item()
+            scalars['D/loss_fake'] = d_loss_fake.item()
+            scalars['D/loss_gp'] = d_loss_gp.item()
 
             # =============================================================== #
             # 3. Train the generator
@@ -263,7 +285,7 @@ class STGANAgent(object):
                 g_loss_rec = torch.mean(torch.abs(x_real - x_reconst))
 
                 # backward and optimize
-                g_loss = g_loss_gan + self.config.rec_loss_weight * \
+                g_loss = g_loss_gan + self.config.g_loss_rec_weight * \
                     g_loss_rec + self.config.g_loss_att_weight * g_loss_att
                 self.optimizer_G.zero_grad()
                 g_loss.backward()
@@ -271,9 +293,9 @@ class STGANAgent(object):
 
                 # summarize
                 scalars['G/loss'] = g_loss.item()
-                scalars['G/g_loss_gan'] = g_loss_gan.item()
-                scalars['G/g_loss_att'] = g_loss_att.item()
-                scalars['G/g_loss_rec'] = g_loss_rec.item()
+                scalars['G/loss_adv'] = g_loss_gan.item()
+                scalars['G/loss_cls'] = g_loss_att.item()
+                scalars['G/loss_rec'] = g_loss_rec.item()
 
             self.current_iteration += 1
 

@@ -6,10 +6,9 @@ MAX_DIM = 64 * 16
 
 
 def _concat(x, attr):
-    n, _, h, w = x.size()
-    c = attr.size()[1]
-    attr = attr.view((n, c, 1, 1)).expand(
-        (n, c, h, w))
+    n, state_dim, h, w = x.size()
+    att_dim = attr.size()[1]
+    attr = attr.view((n, att_dim, 1, 1)).expand((n, att_dim, h, w))
     return torch.cat([x, attr], 1)
 
 
@@ -26,7 +25,7 @@ class conv_norm_active(nn.Module):
         elif conv_mode == 'dconv':
             conv_module = nn.ConvTranspose2d(
                 in_channels, out_channels, kernel_size, stride=stride,
-                padding=padding, bias=bias),
+                padding=padding, bias=bias)
         else:
             raise NotImplementedError
 
@@ -46,6 +45,8 @@ class conv_norm_active(nn.Module):
             act_module = nn.Tanh()
         elif act_mode == 'lrelu':
             act_module = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        elif act_mode == 'relu':
+            act_module = nn.ReLU(inplace=True)
         else:
             raise NotImplementedError
 
@@ -53,7 +54,7 @@ class conv_norm_active(nn.Module):
         self.features = nn.Sequential(
             conv_module,
             norm_module,
-            act_module,
+            act_module
         )
 
     def forward(self, x):
@@ -134,17 +135,14 @@ class Gstu(nn.Module):
 
     def forward(self, zs, _a):
         n, state_dim, h, w = zs[-1].size()
-        att_dim = _a.size()[1]
         zs_ = [zs[-1].clone()]
 
-        attr = _a.view((n, att_dim, 1, 1)).expand((n, att_dim, h, w))
-        # state = torch.cat([zs[-1], attr], dim=1)
-        state = _concat(zs[-1], attr)
+        state = _concat(zs[-1], _a)
         for i, layer in enumerate(self.stu):
             output_, state_ = layer(zs[self.n_layers - 1 - i], state)
             zs_.append(output_)
             if self.inject_layers > i:
-                state = _concat(state_, attr)
+                state = _concat(state_, _a)
             else:
                 state = state_
         return zs_
@@ -159,27 +157,27 @@ class Gdec(nn.Module):
         self.shortcut_layers = shortcut_layers
         self.inject_layers = inject_layers
 
+        in_dim = min(dim * 2**(n_layers - 1), MAX_DIM) + att_dim
         for i in range(n_layers):
             d = min(dim * 2**(n_layers - 1 - i), MAX_DIM)
             up_d = min(dim * 2**(n_layers - 2 - i), MAX_DIM)
-            next_in_dim = d + att_dim
             if i < n_layers - 1:
                 self.decoder.append(conv_norm_active(
-                    next_in_dim, d, 4, 2, 1, conv_mode='dconv',
+                    in_dim, d, 4, 2, 1, conv_mode='dconv',
                     norm_mode='bn', act_mode='relu'))
 
-                next_in_dim = d
+                in_dim = d
                 if shortcut_layers > i:
-                    next_in_dim += up_d
+                    in_dim += up_d
 
                 if inject_layers > i:
-                    next_in_dim += att_dim
+                    in_dim += att_dim
 
             else:
                 if one_more_conv:
                     self.decoder.append(nn.Sequential(
                         conv_norm_active(
-                            next_in_dim, dim // 4, 4, 2, 1,
+                            in_dim, dim // 4, 4, 2, 1,
                             conv_mode='dconv', norm_mode='bn',
                             act_mode='relu'),
                         nn.ConvTranspose2d(dim // 4, 3, one_more_conv, 1),
@@ -187,20 +185,19 @@ class Gdec(nn.Module):
                     ))
                 else:
                     self.decoder.append(nn.Sequential(
-                        nn.ConvTranspose2d(next_in_dim, 3, 4, 2, 1),
+                        nn.ConvTranspose2d(in_dim, 3, 4, 2, 1),
                         nn.Tanh()
                     ))
 
     def forward(self, zs_, _a):
-        z = _concat(zs_[-1], _a)
+        z = _concat(zs_[0], _a)
         for i, layer in enumerate(self.decoder):
+            z = layer(z)
             if i < self.n_layers - 1:
-                z = layer(z)
                 if self.shortcut_layers > i:
-                    z = torch.cat([z, zs_[self.n_layers - 2 - i]], dim=1)
+                    z = torch.cat([z, zs_[i + 1]], dim=1)
                 if self.inject_layers > i:
                     z = _concat(z, _a)
-
         return z
 
 

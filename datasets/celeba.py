@@ -58,7 +58,8 @@ class CelebADataset(data.Dataset):
 
 class CelebADataLoader(object):
     def __init__(self, datadir, att_list_file, mode, selected_attrs,
-                 crop_size=None, image_size=128, batch_size=16):
+                 crop_size=None, image_size=128, batch_size=16,
+                 num_workers=16):
         if mode not in ['train', 'test', ]:
             return
 
@@ -77,7 +78,8 @@ class CelebADataLoader(object):
                 datadir, att_list_file, 'val', selected_attrs,
                 transform=val_transform)
             self.val_loader = data.DataLoader(
-                val_set, batch_size=batch_size, shuffle=False, num_workers=4)
+                val_set, batch_size=batch_size, shuffle=False,
+                num_workers=num_workers)
             self.val_iterations = int(math.ceil(len(val_set) / batch_size))
 
             transform.insert(0, transforms.RandomHorizontalFlip())
@@ -86,7 +88,8 @@ class CelebADataLoader(object):
                 datadir, att_list_file, 'train', selected_attrs,
                 transform=train_transform)
             self.train_loader = data.DataLoader(
-                train_set, batch_size=batch_size, shuffle=True, num_workers=4)
+                train_set, batch_size=batch_size, shuffle=True,
+                num_workers=num_workers)
             self.train_iterations = int(math.ceil(len(train_set) / batch_size))
         else:
             test_transform = transforms.Compose(transform)
@@ -94,5 +97,7 @@ class CelebADataLoader(object):
                 datadir, att_list_file, 'test', selected_attrs,
                 transform=test_transform)
             self.test_loader = data.DataLoader(
-                test_set, batch_size=batch_size, shuffle=False, num_workers=4)
+                test_set, batch_size=batch_size, shuffle=False,
+                num_workers=num_workers)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
+
