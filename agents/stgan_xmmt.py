@@ -22,12 +22,15 @@ cudnn.benchmark = True
 
 class STGANAgent(object):
     def __init__(self, config):
+        """ Create G, D, Dataloader and SummaryWriter. """
+        # Load config
         self.config = config
         for k, v in self.config.items():
             print("{}: {}".format(k, v))
         self.logger = logging.getLogger("STGAN")
-        self.logger.info("Creating STGAN architecture...")
 
+        # Create G and D
+        self.logger.info("Creating STGAN architecture...")
         self.G = G_stgan(len(config.attrs),
                          enc_dim=config.enc_dim,
                          stu_dim=config.stu_dim,
@@ -42,21 +45,23 @@ class STGANAgent(object):
                          use_stu=config.use_stu,
                          multi_inputs=config.multi_inputs,
                          one_more_conv=config.one_more_conv)
-
         self.D = D_stgan(config.image_size,
                          len(config.attrs),
                          dim=config.dis_dim,
                          fc_dim=config.dis_fc_dim,
                          n_layers=config.dis_layers)
 
+        # Create DataLoader
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
             self.config.data_root, self.config.att_list_file, self.config.mode,
             self.config.attrs, self.config.crop_size, self.config.image_size,
             self.config.batch_size, self.config.num_workers)
 
+        # Iteration cunter
         self.current_iteration = 0
-        self.cuda = torch.cuda.is_available() & self.config.cuda
 
+        # Model to device
+        self.cuda = torch.cuda.is_available() & self.config.cuda
         if self.cuda:
             self.device = torch.device("cuda")
             self.logger.info("Operation will be on *****GPU-CUDA***** ")
@@ -65,9 +70,11 @@ class STGANAgent(object):
             self.device = torch.device("cpu")
             self.logger.info("Operation will be on *****CPU***** ")
 
+        # Create SummaryWriter
         self.writer = SummaryWriter(log_dir=self.config.summary_dir)
 
     def save_checkpoint(self):
+        """ Save checkpoint to `checkpoint_dir` in the train config."""
         G_state = {
             'state_dict': self.G.state_dict(),
             'optimizer': self.optimizer_G.state_dict(),
@@ -78,16 +85,22 @@ class STGANAgent(object):
         }
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
         D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
+        print("Saving checkpoint: {}, {}.".format(G_filename, D_filename))
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
         torch.save(D_state, os.path.join(
             self.config.checkpoint_dir, D_filename))
 
     def load_checkpoint(self):
+        """ Load checkpoint(have been saved in right place) according to SET
+        'checkpoint' in train.yaml file.
+        """
         if self.config.checkpoint is None:
             self.G.to(self.device)
             self.D.to(self.device)
             return
+        print('Loading checkpoint: G_{}.pth.tar, D_{}.pth.tar'.format(
+            self.config.checkpoint, self.config.checkpoint))
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
@@ -112,12 +125,18 @@ class STGANAgent(object):
         return out.clamp_(0, 1)
 
     def create_labels(self, c_org, selected_attrs=None):
-        """Generate target domain labels for debugging and testing."""
+        c_trg_list = []
+        for i in range(len(selected_attrs)):
+            c_trg = c_org.clone()
+            c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
+            c_trg_list.append(c_trg.to(self.device))
+        return c_trg_list
+
+    def create_labels_haircolor(self, c_org, selected_attrs):
         # get hair color indices
         hair_color_indices = []
         for i, attr_name in enumerate(selected_attrs):
-            if attr_name in ['Black_Hair', 'Blond_Hair', 'Brown_Hair',
-                             'Gray_Hair']:
+            if attr_name in ['Black_Hair', 'Blond_Hair', 'Brown_Hair']:
                 hair_color_indices.append(i)
 
         c_trg_list = []
@@ -125,20 +144,19 @@ class STGANAgent(object):
             c_trg = c_org.clone()
             # set one hair color to 1 and the rest to 0
             if i in hair_color_indices:
-                c_trg[:, i] = 1
+                c_trg[:, i] = 1.5
                 for j in hair_color_indices:
                     if j != i:
                         c_trg[:, j] = 0
-            else:
-                c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
+            # else:
+            #     c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
 
             c_trg_list.append(c_trg.to(self.device))
         return c_trg_list
 
     def classification_loss(self, logit, target):
         """Compute binary cross entropy loss."""
-        return F.binary_cross_entropy_with_logits(
-            logit, target, reduction='sum') / logit.size(0)
+        return F.binary_cross_entropy_with_logits(logit, target)
 
     def gradient_penalty(self, y, x):
         """Compute gradient penalty: (L2_norm(dy/dx) - 1)**2."""
@@ -151,10 +169,13 @@ class STGANAgent(object):
                                    only_inputs=True)[0]
 
         dydx = dydx.view(dydx.size(0), -1)
-        dydx_l2norm = torch.sqrt(torch.sum(dydx**2, dim=1))
+        dydx_l2norm = torch.norm(dydx, dim=1)
         return torch.mean((dydx_l2norm - 1)**2)
 
     def run(self):
+        """The ENTRANCE of train/test process. When encounter exception making
+        training process failed, we will SAVE checkpoint right now.
+        """
         assert self.config.mode in ['train', 'test']
         try:
             if self.config.mode == 'train':
@@ -163,15 +184,19 @@ class STGANAgent(object):
                 self.test()
         except KeyboardInterrupt:
             self.logger.info('You have entered CTRL+C.. Wait to finalize')
-        except Exception as e:
+            self.save_checkpoint()
+        except Exception:
             traceback.print_exc()
             log_file = open(os.path.join(
                 self.config.log_dir, 'exp_error.log'), 'w+')
             traceback.print_exc(file=log_file)
+            self.save_checkpoint()
         finally:
             self.finalize()
 
     def train(self):
+        """ The TRAIN function to train model."""
+        # Create optimizer and lr_scheduler
         self.optimizer_G = optim.Adam(self.G.parameters(), self.config.g_lr, [
                                       self.config.beta1, self.config.beta2])
         self.optimizer_D = optim.Adam(self.D.parameters(), self.config.d_lr, [
@@ -181,6 +206,7 @@ class STGANAgent(object):
         self.lr_scheduler_D = optim.lr_scheduler.StepLR(
             self.optimizer_D, step_size=self.config.lr_decay_iters, gamma=0.1)
 
+        # Load checkpoint if 'checkpoint' is SET in train.yaml
         self.load_checkpoint()
         if self.cuda and self.config.ngpu > 1:
             self.G = nn.DataParallel(
@@ -188,20 +214,27 @@ class STGANAgent(object):
             self.D = nn.DataParallel(
                 self.D, device_ids=list(range(self.config.ngpu)))
 
+        # Get val dataloader
         val_iter = iter(self.data_loader.val_loader)
         x_sample, c_org_sample = next(val_iter)
         x_sample = x_sample.to(self.device)
         c_sample_list = self.create_labels(c_org_sample, self.config.attrs)
         c_sample_list.insert(0, c_org_sample)  # reconstruction
 
+        # get curr lr
         self.g_lr = self.lr_scheduler_G.get_lr()[0]
         self.d_lr = self.lr_scheduler_D.get_lr()[0]
 
+        # Get train dataloader
         data_iter = iter(self.data_loader.train_loader)
         start_time = time.time()
+
+        # Train loop
         for i in range(self.current_iteration, self.config.max_iters):
+            # set train mode
             self.G.train()
             self.D.train()
+
             # =============================================================== #
             # 1. Preprocess input data
             # =============================================================== #
@@ -226,7 +259,6 @@ class STGANAgent(object):
 
             # labels for computing classification loss
             label_org = label_org.to(self.device)
-            # labels for computing classification loss
             label_trg = label_trg.to(self.device)
 
             # =============================================================== #
@@ -239,8 +271,9 @@ class STGANAgent(object):
             d_loss_att = self.classification_loss(xa_logit_att, label_org)
 
             # compute loss with fake images
-            attr_diff = c_trg - c_org
-            attr_diff = attr_diff * (2 * self.config.thres_int)
+            _c_trg = (c_trg.float() * 2 - 1) * self.config.thres_int
+            _c_org = (c_org.float() * 2 - 1) * self.config.thres_int
+            attr_diff = _c_trg - _c_org
             x_fake = self.G(x_real, attr_diff)
             xb__logit_gan, xb__logit_att = self.D(x_fake.detach())
             d_loss_fake = torch.mean(xb__logit_gan)
@@ -308,6 +341,7 @@ class STGANAgent(object):
             iters_ = self.current_iteration % \
                 self.data_loader.train_iterations
 
+            # Summay
             if self.current_iteration % self.config.summary_step == 0:
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
@@ -317,7 +351,7 @@ class STGANAgent(object):
                     self.current_iteration, self.config.max_iters))
                 for tag, value in scalars.items():
                     self.writer.add_scalar(tag, value, self.current_iteration)
-
+            # Sample
             if self.current_iteration % self.config.sample_step == 0:
                 self.G.eval()
                 with torch.no_grad():
@@ -336,6 +370,7 @@ class STGANAgent(object):
                         self.config.sample_dir, 'sample_{}.jpg'.format(
                             self.current_iteration)), nrow=1, padding=0)
 
+            # Save checkpoint
             if self.current_iteration % self.config.checkpoint_step == 0:
                 self.save_checkpoint()
 
@@ -343,6 +378,10 @@ class STGANAgent(object):
             self.lr_scheduler_D.step()
 
     def test(self):
+        """Test the model use `data_loader.test_loader`.
+        When testing model, you must specify 'checkpoint' keyword in test.yaml,
+        so self.load_checkpoints() can load right model checkpoint.
+        """
         self.load_checkpoint()
         self.G.to(self.device)
 
@@ -355,6 +394,7 @@ class STGANAgent(object):
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
+                c_org = c_org.to(self.device)
                 c_trg_list = self.create_labels(c_org, self.config.attrs)
 
                 x_fake_list = [x_real]
@@ -364,7 +404,7 @@ class STGANAgent(object):
                         self.G(x_real, attr_diff.to(self.device)))
                 x_concat = torch.cat(x_fake_list, dim=3)
                 result_path = os.path.join(
-                    self.config.result_dir, 'sample_{}.jpg'.format(i + 1))
+                    self.config.result_dir, 'test_{}.jpg'.format(i + 1))
                 save_image(self.denorm(x_concat.data.cpu()),
                            result_path, nrow=1, padding=0)
 

@@ -66,6 +66,7 @@ class STGANAgent(object):
         }
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
         D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
+        print("Saving checkpoint: {}, {}.".format(G_filename, D_filename))
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
         torch.save(D_state, os.path.join(
@@ -76,6 +77,8 @@ class STGANAgent(object):
             self.G.to(self.device)
             self.D.to(self.device)
             return
+        print('Loading checkpoint: G_{}.pth.tar, D_{}.pth.tar'.format(
+            self.config.checkpoint, self.config.checkpoint))
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
@@ -111,13 +114,37 @@ class STGANAgent(object):
         c_trg_list = []
         for i in range(len(selected_attrs)):
             c_trg = c_org.clone()
-            if i in hair_color_indices:  # set one hair color to 1 and the rest to 0
+            # set one hair color to 1 and the rest to 0
+            if i in hair_color_indices:
                 c_trg[:, i] = 1
                 for j in hair_color_indices:
                     if j != i:
                         c_trg[:, j] = 0
             else:
                 c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
+
+            c_trg_list.append(c_trg.to(self.device))
+        return c_trg_list
+
+    def create_labels_of_no_label_img(self, c_org, selected_attrs):
+        """Generate target domain labels for debugging and testing."""
+        # get hair color indices
+        hair_color_indices = []
+        for i, attr_name in enumerate(selected_attrs):
+            if attr_name in ['Black_Hair', 'Blond_Hair', 'Brown_Hair']:
+                hair_color_indices.append(i)
+
+        c_trg_list = []
+        for i in range(len(selected_attrs)):
+            c_trg = c_org.clone()
+            # set one hair color to 1 and the rest to 0
+            if i in hair_color_indices:
+                c_trg[:, i] = 1.5
+                for j in hair_color_indices:
+                    if j != i:
+                        c_trg[:, j] = 0
+            # else:
+            #     c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
 
             c_trg_list.append(c_trg.to(self.device))
         return c_trg_list
@@ -151,6 +178,7 @@ class STGANAgent(object):
         except KeyboardInterrupt:
             self.logger.info('You have entered CTRL+C.. Wait to finalize')
         except Exception as e:
+            traceback.print_exc()
             log_file = open(os.path.join(
                 self.config.log_dir, 'exp_error.log'), 'w+')
             traceback.print_exc(file=log_file)
@@ -341,7 +369,10 @@ class STGANAgent(object):
         with torch.no_grad():
             for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
-                c_trg_list = self.create_labels(c_org, self.config.attrs)
+                c_org = c_org.to(self.device)
+                # c_trg_list = self.create_labels(c_org, self.config.attrs)
+                c_trg_list = self.create_labels_of_no_label_img(
+                    c_org, self.config.attrs)
 
                 x_fake_list = [x_real]
                 for c_trg in c_trg_list:
@@ -350,7 +381,7 @@ class STGANAgent(object):
                         self.G(x_real, attr_diff.to(self.device)))
                 x_concat = torch.cat(x_fake_list, dim=3)
                 result_path = os.path.join(
-                    self.config.result_dir, 'sample_{}.jpg'.format(i + 1))
+                    self.config.result_dir, 'test_{}.jpg'.format(i + 1))
                 save_image(self.denorm(x_concat.data.cpu()),
                            result_path, nrow=1, padding=0)
 

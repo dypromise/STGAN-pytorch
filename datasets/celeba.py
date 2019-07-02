@@ -27,12 +27,13 @@ def make_dataset(att_list_file, mode, selected_attrs):
     items = []
     for i, line in enumerate(lines):
         split = line.split()
-        filename = split[0].replace('jpg', 'png')
+        # filename = split[0].replace('jpg', 'png')
+        filename = split[0]
         values = split[1:]
         label = []
         for attr_name in selected_attrs:
             idx = attr2idx[attr_name]
-            label.append(values[idx] == '1')
+            label.append(values[idx] == '1')  # change label '-1'/'1' to 0/1
         items.append([filename, label])
     return items
 
@@ -69,7 +70,7 @@ class CelebADataLoader(object):
         transform.append(transforms.Resize(image_size))
         transform.append(transforms.ToTensor())
         transform.append(transforms.Normalize(
-            mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+            mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))  # value range -1~1
 
         if mode == 'train':
             # make val loader before transform is inserted
@@ -100,4 +101,3 @@ class CelebADataLoader(object):
                 test_set, batch_size=batch_size, shuffle=False,
                 num_workers=num_workers)
             self.test_iterations = int(math.ceil(len(test_set) / batch_size))
-

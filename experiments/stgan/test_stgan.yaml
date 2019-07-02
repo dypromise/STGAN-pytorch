@@ -1,0 +1,48 @@
+# meta
+exp_name: stgan
+model_name: stgan
+mode: test
+cuda: true
+ngpu: 1
+
+# data
+dataset: celeba
+data_root: /dockerdata/home/rpf/rpf/xmmtyding/test_data/resize320to384
+att_list_file: /dockerdata/home/rpf/rpf/xmmtyding/test_data/190628_test_set_male_image_mae_att_list.txt
+crop_size: 384
+image_size: 384
+
+# model
+g_conv_dim: 48
+d_conv_dim: 48
+d_fc_dim: 512
+g_layers: 5
+d_layers: 5
+shortcut_layers: 4
+stu_kernel_size: 3
+use_stu: true
+one_more_conv: true
+attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Young, HairLength]
+
+# training
+batch_size: 16
+beta1: 0.5
+beta2: 0.5
+g_lr: 0.0002
+d_lr: 0.0002
+n_critic: 5
+thres_int: 0.5
+lambda_gp: 10
+lambda1: 1
+lambda2: 10
+lambda3: 100
+max_iters: 1000000
+lr_decay_iters: 800000
+
+# test
+checkpoint: 82500
+
+# steps:
+summary_step: 10
+sample_step: 2500
+checkpoint_step: 2500

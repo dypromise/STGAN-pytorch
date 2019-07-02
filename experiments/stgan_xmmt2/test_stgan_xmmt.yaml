@@ -1,7 +1,7 @@
 # meta
 exp_name: stgan
 model_name: stgan_xmmt
-mode: train
+mode: test
 cuda: true
 ngpu: 4
 
@@ -32,13 +32,13 @@ one_more_conv: 0
 attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Young]
 
 # training
-checkpoint: ~
+checkpoint: 17500 
 batch_size: 64
 num_workers: 16
 beta1: 0.5
 beta2: 0.5
-g_lr: 0.0005
-d_lr: 0.0005
+g_lr: 0.0006
+d_lr: 0.0006
 n_critic: 5
 thres_int: 0.5
 d_loss_att_weight: 1

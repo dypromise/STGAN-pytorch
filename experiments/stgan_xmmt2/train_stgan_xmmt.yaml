@@ -8,7 +8,7 @@ ngpu: 4
 # data
 dataset: celeba
 data_root: /dockerdata/xmmtyding/celeb_data/img_crop_celeba_png/
-att_list_file: /dockerdata/xmmtyding/celeb_data/list_attr_celeba.txt
+att_list_file: /dockerdata/xmmtyding/celeb_data/list_attr_celeba_png.txt
 crop_size: 384
 image_size: 384
 
@@ -30,15 +30,15 @@ use_stu: true
 multi_inputs: 1
 one_more_conv: 0
 attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Young]
-checkpoint: ~
 
 # training
+checkpoint: 17500 
 batch_size: 64
 num_workers: 16
 beta1: 0.5
-beta2: 0.9
-g_lr: 0.0002
-d_lr: 0.0002
+beta2: 0.5
+g_lr: 0.0006
+d_lr: 0.0006
 n_critic: 5
 thres_int: 0.5
 d_loss_att_weight: 1
