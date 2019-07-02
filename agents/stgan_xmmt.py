@@ -242,7 +242,8 @@ class STGANAgent(object):
             # fetch real images and labels
             try:
                 x_real, label_org = next(data_iter)
-            except:
+            except StopIteration:
+                # next loop(epoc)
                 data_iter = iter(self.data_loader.train_loader)
                 x_real, label_org = next(data_iter)
 

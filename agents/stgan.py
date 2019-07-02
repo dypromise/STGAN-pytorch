@@ -177,7 +177,7 @@ class STGANAgent(object):
                 self.test()
         except KeyboardInterrupt:
             self.logger.info('You have entered CTRL+C.. Wait to finalize')
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             log_file = open(os.path.join(
                 self.config.log_dir, 'exp_error.log'), 'w+')
@@ -223,7 +223,8 @@ class STGANAgent(object):
             # fetch real images and labels
             try:
                 x_real, label_org = next(data_iter)
-            except:
+            except StopIteration:
+                # next loop(epoc)
                 data_iter = iter(self.data_loader.train_loader)
                 x_real, label_org = next(data_iter)
 
