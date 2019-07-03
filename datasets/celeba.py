@@ -22,7 +22,7 @@ def make_dataset(att_list_file, mode, selected_attrs):
     if mode == 'val':
         lines = lines[-2000:-1800]  # val set contains 200 images
     if mode == 'test':
-        lines = lines[-1800:]       # test set contains 1800 images
+        lines = lines[:]            # test all
 
     items = []
     for i, line in enumerate(lines):
@@ -51,7 +51,7 @@ class CelebADataset(data.Dataset):
         image = Image.open(os.path.join(self.root, filename))
         if self.transform is not None:
             image = self.transform(image)
-        return image, torch.FloatTensor(label)
+        return image, torch.FloatTensor(label), filename
 
     def __len__(self):
         return len(self.items)
@@ -98,6 +98,6 @@ class CelebADataLoader(object):
                 datadir, att_list_file, 'test', selected_attrs,
                 transform=test_transform)
             self.test_loader = data.DataLoader(
-                test_set, batch_size=batch_size, shuffle=False,
+                test_set, batch_size=1, shuffle=False,
                 num_workers=num_workers)
-            self.test_iterations = int(math.ceil(len(test_set) / batch_size))
+            self.test_iterations = int(math.ceil(len(test_set)))

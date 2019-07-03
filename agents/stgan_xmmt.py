@@ -132,25 +132,12 @@ class STGANAgent(object):
             c_trg_list.append(c_trg.to(self.device))
         return c_trg_list
 
-    def create_labels_haircolor(self, c_org, selected_attrs):
-        # get hair color indices
-        hair_color_indices = []
-        for i, attr_name in enumerate(selected_attrs):
-            if attr_name in ['Black_Hair', 'Blond_Hair', 'Brown_Hair']:
-                hair_color_indices.append(i)
-
+    def create_labels_blondhair(self, c_org):
+        """Generate target domain labels for debugging and testing."""
         c_trg_list = []
-        for i in range(len(selected_attrs)):
+        for i in range(2, 3):  # BlondHair
             c_trg = c_org.clone()
-            # set one hair color to 1 and the rest to 0
-            if i in hair_color_indices:
-                c_trg[:, i] = 1.5
-                for j in hair_color_indices:
-                    if j != i:
-                        c_trg[:, j] = 0
-            # else:
-            #     c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
-
+            c_trg[:, i] = 1.3  # test_int
             c_trg_list.append(c_trg.to(self.device))
         return c_trg_list
 
@@ -216,7 +203,7 @@ class STGANAgent(object):
 
         # Get val dataloader
         val_iter = iter(self.data_loader.val_loader)
-        x_sample, c_org_sample = next(val_iter)
+        x_sample, c_org_sample, _ = next(val_iter)
         x_sample = x_sample.to(self.device)
         c_sample_list = self.create_labels(c_org_sample, self.config.attrs)
         c_sample_list.insert(0, c_org_sample)  # reconstruction
@@ -241,11 +228,11 @@ class STGANAgent(object):
 
             # fetch real images and labels
             try:
-                x_real, label_org = next(data_iter)
+                x_real, label_org, _ = next(data_iter)
             except StopIteration:
                 # next loop(epoc)
                 data_iter = iter(self.data_loader.train_loader)
-                x_real, label_org = next(data_iter)
+                x_real, label_org, _ = next(data_iter)
 
             # generate target domain labels randomly
             rand_idx = torch.randperm(label_org.size(0))
@@ -266,18 +253,31 @@ class STGANAgent(object):
             # 2. Train the discriminator
             # =============================================================== #
 
-            # compute loss with real images
-            xa_logit_gan, xa_logit_att = self.D(x_real)
-            d_loss_real = - torch.mean(xa_logit_gan)
-            d_loss_att = self.classification_loss(xa_logit_att, label_org)
-
-            # compute loss with fake images
+            # generate xb_
             _c_trg = (c_trg.float() * 2 - 1) * self.config.thres_int
             _c_org = (c_org.float() * 2 - 1) * self.config.thres_int
             attr_diff = _c_trg - _c_org
             x_fake = self.G(x_real, attr_diff)
+            xa_logit_gan, xa_logit_att = self.D(x_real)
             xb__logit_gan, xb__logit_att = self.D(x_fake.detach())
-            d_loss_fake = torch.mean(xb__logit_gan)
+
+            # compute d_gan_loss
+            if self.config.gan_loss_mode == 'wgan':
+                d_loss_real = - torch.mean(xa_logit_gan)
+                d_loss_fake = torch.mean(xb__logit_gan)
+                d_loss_gan = d_loss_real + d_loss_fake
+
+            elif self.config.gan_loss_mode == 'lsgan':
+                d_loss_real = F.mse_loss(
+                    xa_logit_gan, torch.ones_like(xa_logit_gan))
+                d_loss_fake = F.mse_loss(
+                    xb__logit_gan, torch.zeros_like(xb__logit_gan))
+                d_loss_gan = d_loss_real + d_loss_fake
+            else:
+                raise NotImplementedError
+
+            # compute d_att_loss
+            d_loss_att = self.classification_loss(xa_logit_att, label_org)
 
             # compute loss for gradient penalty
             alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
@@ -287,9 +287,9 @@ class STGANAgent(object):
             d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
             # backward and optimize
-            d_loss_gan = d_loss_real + d_loss_fake + \
-                self.config.d_loss_gp_weight * d_loss_gp
-            d_loss = d_loss_gan + self.config.d_loss_att_weight * d_loss_att
+            d_loss_gan = d_loss_real + d_loss_fake
+            d_loss = d_loss_gan + self.config.d_loss_gp_weight * d_loss_gp + \
+                self.config.d_loss_att_weight * d_loss_att
             self.optimizer_D.zero_grad()
             d_loss.backward(retain_graph=True)
             self.optimizer_D.step()
@@ -311,7 +311,11 @@ class STGANAgent(object):
                 # original-to-target domain
                 x_fake = self.G(x_real, attr_diff)
                 xb__logit_gan, xb__logit_att = self.D(x_fake)
-                g_loss_gan = - torch.mean(xb__logit_gan)
+                if self.config.gan_loss_mode == 'wgan':
+                    g_loss_gan = - torch.mean(xb__logit_gan)
+                elif self.config.gan_loss_mode == 'lsgan':
+                    g_loss_gan = F.mse_loss(
+                        xb__logit_gan, torch.ones_like(xb__logit_gan))
                 g_loss_att = self.classification_loss(xb__logit_att, label_trg)
 
                 # target-to-original domain
@@ -393,11 +397,10 @@ class STGANAgent(object):
 
         self.G.eval()
         with torch.no_grad():
-            for i, (x_real, c_org) in enumerate(tqdm_loader):
+            for i, (x_real, c_org, _) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
                 c_org = c_org.to(self.device)
-                c_trg_list = self.create_labels(c_org, self.config.attrs)
-
+                c_trg_list = self.create_labels_blondhair(c_org)
                 x_fake_list = [x_real]
                 for c_trg in c_trg_list:
                     attr_diff = c_trg - c_org

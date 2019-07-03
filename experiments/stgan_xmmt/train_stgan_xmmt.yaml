@@ -1,0 +1,56 @@
+# meta
+exp_name: stgan_xmmt
+model_name: stgan_xmmt
+mode: train
+cuda: true
+ngpu: 4
+
+# data
+dataset: celeba
+data_root: /dockerdata/home/rpf/rpf/xmmtyding/celeba_data/crop384/img_crop_celeba_png/
+att_list_file: /dockerdata/home/rpf/rpf/xmmtyding/celeba_data/crop384/list_attr_celeba_png.txt
+crop_size: 384
+image_size: 384
+
+# model
+gan_loss_mode: lsgan
+enc_dim: 64
+stu_dim: 64
+dec_dim: 64
+enc_layers: 5
+stu_layers: 4
+dec_layers: 5
+shortcut_layers: 4
+inject_layers: 4
+stu_kernel_size: 3
+stu_inject_layers: 4
+dis_layers: 5
+dis_dim: 64
+dis_fc_dim: 512
+use_stu: true
+multi_inputs: 1
+one_more_conv: 1
+attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Straight_Hair, Wavy_Hair]
+
+# training
+checkpoint: ~ 
+batch_size: 64
+num_workers: 16
+beta1: 0.5
+beta2: 0.999
+g_lr: 0.0008
+d_lr: 0.0008
+n_critic: 5
+thres_int: 0.5
+d_loss_fake_weight: 1
+d_loss_att_weight: 1
+d_loss_gp_weight: 10
+g_loss_att_weight: 10
+g_loss_rec_weight: 100
+max_iters: 1000000
+lr_decay_iters: 800000
+
+# steps:
+summary_step: 10
+sample_step: 1000
+checkpoint_step: 2000

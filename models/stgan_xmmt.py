@@ -116,11 +116,11 @@ class ConvGRUCell(nn.Module):
 
 class Gstu(nn.Module):
     def __init__(self, att_dim, dim=64, enc_layers=5, n_layers=4,
-                 inject_layers=4, kernel_size=3, norm='none'):
+                 stu_inject_layers=4, kernel_size=3, norm='none'):
         super(Gstu, self).__init__()
         self.stu = nn.ModuleList()
         self.n_layers = n_layers
-        self.inject_layers = inject_layers
+        self.stu_inject_layers = stu_inject_layers
 
         # init dims
         state_dim = att_dim + dim * 2**(enc_layers - 1)
@@ -128,20 +128,20 @@ class Gstu(nn.Module):
             d = min(dim * 2**(n_layers - 1 - i), MAX_DIM)
             self.stu.append(ConvGRUCell(
                 d, state_dim, d, kernel_size=kernel_size))
-            if inject_layers > i:
+            if stu_inject_layers > i:
                 state_dim = d + att_dim
             else:
                 state_dim = d
 
     def forward(self, zs, _a):
         n, state_dim, h, w = zs[-1].size()
-        zs_ = [zs[-1].clone()]
+        zs_ = [zs[-1]]
 
         state = _concat(zs[-1], _a)
         for i, layer in enumerate(self.stu):
             output_, state_ = layer(zs[self.n_layers - 1 - i], state)
-            zs_.append(output_)
-            if self.inject_layers > i:
+            zs_.insert(0, output_)
+            if self.stu_inject_layers > i:
                 state = _concat(state_, _a)
             else:
                 state = state_
@@ -149,15 +149,16 @@ class Gstu(nn.Module):
 
 
 class Gdec(nn.Module):
-    def __init__(self, att_dim, dim=64, n_layers=5, shortcut_layers=1,
-                 inject_layers=0, is_training=True, one_more_conv=0):
+    def __init__(self, att_dim, dim=64, n_layers=5, shortcut_layers=4,
+                 inject_layers=4, enc_layers=5, is_training=True,
+                 one_more_conv=0):
         super(Gdec, self).__init__()
         self.decoder = nn.ModuleList()
         self.n_layers = n_layers
         self.shortcut_layers = shortcut_layers
         self.inject_layers = inject_layers
 
-        in_dim = min(dim * 2**(n_layers - 1), MAX_DIM) + att_dim
+        in_dim = min(dim * 2**(enc_layers - 1), MAX_DIM) + att_dim
         for i in range(n_layers):
             d = min(dim * 2**(n_layers - 1 - i), MAX_DIM)
             up_d = min(dim * 2**(n_layers - 2 - i), MAX_DIM)
@@ -190,12 +191,12 @@ class Gdec(nn.Module):
                     ))
 
     def forward(self, zs_, _a):
-        z = _concat(zs_[0], _a)
+        z = _concat(zs_[-1], _a)
         for i, layer in enumerate(self.decoder):
             z = layer(z)
             if i < self.n_layers - 1:
                 if self.shortcut_layers > i:
-                    z = torch.cat([z, zs_[i + 1]], dim=1)
+                    z = torch.cat([z, zs_[self.n_layers - 2 - i]], dim=1)
                 if self.inject_layers > i:
                     z = _concat(z, _a)
         return z
@@ -210,11 +211,13 @@ class G_stgan(nn.Module):
         self.Genc = Genc(dim=enc_dim, n_layers=enc_layers,
                          multi_inputs=multi_inputs)
         self.Gstu = Gstu(attr_dim, dim=stu_dim, enc_layers=enc_layers,
-                         n_layers=stu_layers, inject_layers=stu_inject_layers,
+                         n_layers=stu_layers,
+                         stu_inject_layers=stu_inject_layers,
                          kernel_size=stu_kernel_size)
         self.Gdec = Gdec(attr_dim, dim=dec_dim, n_layers=dec_layers,
                          shortcut_layers=shortcut_layers,
                          inject_layers=inject_layers,
+                         enc_layers=enc_layers,
                          one_more_conv=one_more_conv)
 
     def forward(self, x, _a):

@@ -1,34 +1,34 @@
 # meta
-exp_name: stgan
 model_name: stgan
+exp_name: stgan
 mode: train
 cuda: true
-ngpu: 4
+ngpu: 2
 
 # data
 dataset: celeba
-data_root: /dockerdata/home/rpf/rpf/xmmtyding/celeba_data/crop384/img_crop_celeba_png/
-att_list_file: /dockerdata/home/rpf/rpf/xmmtyding/celeba_data/crop384/new_list_attr_celeba_addhair.txt
+data_root: /dockerdata/xmmtyding/celeb_data/img_crop_celeba_png/
+att_list_file: /dockerdata/xmmtyding/celeb_data/list_attr_celeba_png.txt
 crop_size: 384
 image_size: 384
 
 # model
-g_conv_dim: 48
-d_conv_dim: 48
-d_fc_dim: 512
+g_conv_dim: 64
+d_conv_dim: 64
+d_fc_dim: 1024
 g_layers: 5
 d_layers: 5
-shortcut_layers: 4
+shortcut_layers: 3
 stu_kernel_size: 3
 use_stu: true
 one_more_conv: true
-attrs: [Bangs, Black_Hair, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, No_Beard, Pale_Skin, Young, HairLength]
+attrs: [Bangs, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_Slightly_Open, Mustache, Pale_Skin, Young]
 checkpoint: ~
 
 # training
-batch_size: 64
+batch_size: 32
 beta1: 0.5
-beta2: 0.5
+beta2: 0.999
 g_lr: 0.0002
 d_lr: 0.0002
 n_critic: 5
@@ -41,6 +41,6 @@ max_iters: 1000000
 lr_decay_iters: 800000
 
 # steps:
-summary_step: 10
-sample_step: 2500
-checkpoint_step: 2500
+summary_step: 100
+sample_step: 1000
+checkpoint_step: 2000

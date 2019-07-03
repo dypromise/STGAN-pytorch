@@ -3,6 +3,13 @@ import torch.nn as nn
 from torchsummary import summary
 
 
+def _concat(x, attr):
+    n, state_dim, h, w = x.size()
+    att_dim = attr.size()[1]
+    attr = attr.view((n, att_dim, 1, 1)).expand((n, att_dim, h, w))
+    return torch.cat([x, attr], 1)
+
+
 class ConvGRUCell(nn.Module):
     def __init__(self, n_attrs, in_dim, out_dim, kernel_size=3):
         super(ConvGRUCell, self).__init__()
@@ -63,7 +70,7 @@ class Generator(nn.Module):
         if use_stu:
             self.stu = nn.ModuleList()
             for i in reversed(range(self.n_layers - 1 - self.shortcut_layers,
-                                    self.n_layers - 1)):
+                                    self.n_layers - 1)):  # 3，2，1
                 self.stu.append(ConvGRUCell(
                     self.n_attrs,
                     conv_dim * 2 ** i,
@@ -85,7 +92,8 @@ class Generator(nn.Module):
                 elif i <= self.shortcut_layers:     # not <
                     self.decoder.append(nn.Sequential(
                         nn.ConvTranspose2d(
-                            conv_dim * 3 * 2 ** (self.n_layers - 1 - i),
+                            conv_dim * 3 * 2 ** (
+                                self.n_layers - 1 - i) + attr_dim,
                             conv_dim * 2 ** (self.n_layers - 1 - i),
                             4, 2, 1, bias=False),
                         nn.BatchNorm2d(
@@ -141,11 +149,10 @@ class Generator(nn.Module):
             if self.use_stu:
                 stu_out, stu_state = self.stu[i - 1](y[-(i + 1)], stu_state, a)
                 out = torch.cat([out, stu_out], dim=1)
-                out = self.decoder[i](out)
+                out = _concat(out, a)  # inject layers
             else:
                 out = torch.cat([out, y[-(i + 1)]], dim=1)
-                out = self.decoder[i](out)
-
+            out = self.decoder[i](out)
         # propagate non-shortcut layers
         for i in range(self.shortcut_layers + 1, self.n_layers):
             out = self.decoder[i](out)
