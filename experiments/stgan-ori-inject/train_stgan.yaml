@@ -1,18 +1,20 @@
 # meta
+model_name: stgan_inject
 exp_name: stgan
 mode: train
 cuda: true
-ngpu: 2
+ngpu: 3
 
 # data
 dataset: celeba
-data_root: /root/datasets/CelebA/
-crop_size: 178
-image_size: 128
+data_root: /dockerdata/xmmtyding/celeb_data/img_crop_celeba_png/
+att_list_file: /dockerdata/xmmtyding/celeb_data/list_attr_celeba_png.txt
+crop_size: 384
+image_size: 384
 
 # model
-g_conv_dim: 64
-d_conv_dim: 64
+g_conv_dim: 48
+d_conv_dim: 48
 d_fc_dim: 1024
 g_layers: 5
 d_layers: 5
@@ -24,11 +26,11 @@ attrs: [Bangs, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_S
 checkpoint: ~
 
 # training
-batch_size: 32
+batch_size: 48
 beta1: 0.5
 beta2: 0.999
-g_lr: 0.0002
-d_lr: 0.0002
+g_lr: 0.0003
+d_lr: 0.0003
 n_critic: 5
 thres_int: 0.5
 lambda_gp: 10
@@ -39,6 +41,6 @@ max_iters: 1000000
 lr_decay_iters: 800000
 
 # steps:
-summary_step: 100
-sample_step: 5000
-checkpoint_step: 20000
+summary_step: 10
+sample_step: 1000
+checkpoint_step: 2000

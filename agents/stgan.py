@@ -66,7 +66,6 @@ class STGANAgent(object):
         }
         G_filename = 'G_{}.pth.tar'.format(self.current_iteration)
         D_filename = 'D_{}.pth.tar'.format(self.current_iteration)
-        print("Saving checkpoint: {}, {}.".format(G_filename, D_filename))
         torch.save(G_state, os.path.join(
             self.config.checkpoint_dir, G_filename))
         torch.save(D_state, os.path.join(
@@ -77,8 +76,6 @@ class STGANAgent(object):
             self.G.to(self.device)
             self.D.to(self.device)
             return
-        print('Loading checkpoint: G_{}.pth.tar, D_{}.pth.tar'.format(
-            self.config.checkpoint, self.config.checkpoint))
         G_filename = 'G_{}.pth.tar'.format(self.config.checkpoint)
         D_filename = 'D_{}.pth.tar'.format(self.config.checkpoint)
         G_checkpoint = torch.load(os.path.join(
@@ -123,15 +120,6 @@ class STGANAgent(object):
             else:
                 c_trg[:, i] = (c_trg[:, i] == 0)  # reverse attribute value
 
-            c_trg_list.append(c_trg.to(self.device))
-        return c_trg_list
-
-    def create_labels_blondhair(self, c_org):
-        """Generate target domain labels for debugging and testing."""
-        c_trg_list = []
-        for i in range(2, 3):  # BlondHair
-            c_trg = c_org.clone()
-            c_trg[:, i] = 1.0  # test_int
             c_trg_list.append(c_trg.to(self.device))
         return c_trg_list
 
@@ -239,9 +227,12 @@ class STGANAgent(object):
             d_loss_cls = self.classification_loss(out_cls, label_org)
 
             # compute loss with fake images
+            # attr_diff = c_trg - c_org
+            # attr_diff = attr_diff * \
+            #     torch.rand_like(attr_diff) * (2 * self.config.thres_int)
+            c_trg = (c_trg.float() * 2 - 1) * self.config.thres_int
+            c_org = (c_org.float() * 2 - 1) * self.config.thres_int
             attr_diff = c_trg - c_org
-            attr_diff = attr_diff * \
-                torch.rand_like(attr_diff) * (2 * self.config.thres_int)
             x_fake = self.G(x_real, attr_diff)
             out_src, out_cls = self.D(x_fake.detach())
             d_loss_fake = torch.mean(out_src)
@@ -254,18 +245,17 @@ class STGANAgent(object):
             d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
             # backward and optimize
-            d_loss_gan = d_loss_real + d_loss_fake
-            d_loss = d_loss_gan + self.config.lambda_gp * d_loss_gp + \
-                self.config.lambda1 * d_loss_gan
+            d_loss_adv = d_loss_real + d_loss_fake + \
+                self.config.lambda_gp * d_loss_gp
+            d_loss = d_loss_adv + self.config.lambda1 * d_loss_cls
             self.optimizer_D.zero_grad()
             d_loss.backward(retain_graph=True)
-            self.optimizer_D.step()
             self.optimizer_D.step()
 
             # summarize
             scalars = {}
             scalars['D/loss'] = d_loss.item()
-            scalars['D/loss_adv'] = d_loss_gan.item()
+            scalars['D/loss_adv'] = d_loss_adv.item()
             scalars['D/loss_cls'] = d_loss_cls.item()
             scalars['D/loss_real'] = d_loss_real.item()
             scalars['D/loss_fake'] = d_loss_fake.item()
@@ -305,18 +295,11 @@ class STGANAgent(object):
             # 4. Miscellaneous
             # =============================================================== #
 
-            epoch_ = self.current_iteration // \
-                self.data_loader.train_iterations
-            iters_ = self.current_iteration % \
-                self.data_loader.train_iterations
-
             if self.current_iteration % self.config.summary_step == 0:
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
-
-                print('eps:{}, epoc:({}), iter:({}/{}), iters:({}/{})'.format(
-                    et, epoch_, iters_, self.data_loader.train_iterations,
-                    self.current_iteration, self.config.max_iters))
+                print('Elapsed [{}], Iteration [{}/{}]'.format(
+                    et, self.current_iteration, self.config.max_iters))
                 for tag, value in scalars.items():
                     self.writer.add_scalar(tag, value, self.current_iteration)
 
@@ -353,27 +336,22 @@ class STGANAgent(object):
                            desc='Testing at checkpoint {}'.format(
                                self.config.checkpoint))
 
-        if not os.path.exists(self.config.result_dir):
-            os.mkdir(self.config.result_dir)
-
         self.G.eval()
         with torch.no_grad():
-            for i, (x_real, c_org, image_name) in enumerate(tqdm_loader):
+            for i, (x_real, c_org) in enumerate(tqdm_loader):
                 x_real = x_real.to(self.device)
-                c_org = c_org.to(self.device)
-                # c_trg_list = self.create_labels(c_org, self.config.attrs)
-                c_trg_list = self.create_labels_blondhair(c_org)
+                c_trg_list = self.create_labels(c_org, self.config.attrs)
 
                 x_fake_list = [x_real]
                 for c_trg in c_trg_list:
                     attr_diff = c_trg - c_org
                     x_fake_list.append(
                         self.G(x_real, attr_diff.to(self.device)))
-                for img_tensor in x_fake_list:
-                    result_path = os.path.join(self.config.result_dir,
-                                               '{}.png'.format(image_name[0]))
-                    save_image(self.denorm(img_tensor.data.cpu()),
-                               result_path, nrow=1, padding=0)
+                x_concat = torch.cat(x_fake_list, dim=3)
+                result_path = os.path.join(
+                    self.config.result_dir, 'sample_{}.jpg'.format(i + 1))
+                save_image(self.denorm(x_concat.data.cpu()),
+                           result_path, nrow=1, padding=0)
 
     def finalize(self):
         print('Please wait while finalizing the operation.. Thank you')

@@ -18,11 +18,11 @@ def make_dataset(att_list_file, mode, selected_attrs):
 
     lines = lines[2:]
     if mode == 'train':
-        lines = lines[:-2000]       # train set contains 200599 images
+        lines = lines[:182000]
     if mode == 'val':
-        lines = lines[-2000:-1800]  # val set contains 200 images
+        lines = lines[182000:182637]
     if mode == 'test':
-        lines = lines[:]            # test all
+        lines = lines[:]  # test all
 
     items = []
     for i, line in enumerate(lines):
@@ -60,7 +60,7 @@ class CelebADataset(data.Dataset):
 class CelebADataLoader(object):
     def __init__(self, datadir, att_list_file, mode, selected_attrs,
                  crop_size=None, image_size=128, batch_size=16,
-                 num_workers=16):
+                 num_workers=8):
         if mode not in ['train', 'test', ]:
             return
 

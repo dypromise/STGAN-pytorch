@@ -3,7 +3,7 @@ model_name: stgan
 exp_name: stgan
 mode: train
 cuda: true
-ngpu: 2
+ngpu: 4
 
 # data
 dataset: celeba
@@ -13,8 +13,8 @@ crop_size: 384
 image_size: 384
 
 # model
-g_conv_dim: 64
-d_conv_dim: 64
+g_conv_dim: 48
+d_conv_dim: 48
 d_fc_dim: 1024
 g_layers: 5
 d_layers: 5
@@ -26,11 +26,11 @@ attrs: [Bangs, Blond_Hair, Brown_Hair, Bushy_Eyebrows, Eyeglasses, Male, Mouth_S
 checkpoint: ~
 
 # training
-batch_size: 32
+batch_size: 64
 beta1: 0.5
 beta2: 0.999
-g_lr: 0.0002
-d_lr: 0.0002
+g_lr: 0.0004
+d_lr: 0.0004
 n_critic: 5
 thres_int: 0.5
 lambda_gp: 10
@@ -41,6 +41,6 @@ max_iters: 1000000
 lr_decay_iters: 800000
 
 # steps:
-summary_step: 100
+summary_step: 10
 sample_step: 1000
 checkpoint_step: 2000
