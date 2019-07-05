@@ -40,7 +40,7 @@ class STGANAgent(object):
         self.data_loader = globals()['{}_loader'.format(self.config.dataset)](
             self.config.data_root, self.config.att_list_file, self.config.mode,
             self.config.attrs, self.config.crop_size, self.config.image_size,
-            self.config.batch_size)
+            self.config.batch_size, self.config.num_workers)
 
         self.current_iteration = 0
         self.cuda = torch.cuda.is_available() & self.config.cuda
